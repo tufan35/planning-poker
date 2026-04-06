@@ -1,0 +1,13 @@
+# syntax=docker/dockerfile:1
+
+FROM node:20-alpine
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY partykit.json ./
+COPY party ./party
+COPY lib ./lib
+EXPOSE 1999
+ENV NODE_ENV=production
+CMD ["npx", "partykit", "dev", "-p", "1999"]

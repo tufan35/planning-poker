@@ -1,0 +1,28 @@
+# Yerel kullanım: docker compose up --build
+# Sonra tarayıcı: http://localhost:3000  (WebSocket: localhost:1999)
+#
+# Telefon / başka PC'den bağlanacaksan, web'i o IP ile açıp
+# NEXT_PUBLIC_PARTYKIT_HOST'u aynı IP ve 1999 portu ile yeniden build et:
+#   NEXT_PUBLIC_PARTYKIT_HOST=192.168.1.10:1999 docker compose up --build
+
+services:
+  partykit:
+    build:
+      context: .
+      dockerfile: Dockerfile.partykit
+    ports:
+      - "1999:1999"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_PARTYKIT_HOST: ${NEXT_PUBLIC_PARTYKIT_HOST:-localhost:1999}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - partykit
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"

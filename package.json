@@ -1,26 +1,36 @@
 {
-  "name": "tmp-next",
+  "name": "poker-programmic",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -n next,pk -c cyan,magenta \"next dev\" \"partykit dev -p 1999\"",
+    "dev:next": "next dev",
+    "dev:party": "partykit dev -p 1999",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up --build"
   },
   "dependencies": {
     "next": "16.2.2",
+    "partykit": "^0.0.115",
+    "partysocket": "^1.1.16",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^20.19.39",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.2"
   }
 }

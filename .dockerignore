@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+docs
+.env
+.env*.local
+npm-debug.log*
+Dockerfile*
+docker-compose*.yml
+.cursor
+mcps
+**/*.test.ts
+vitest.config.ts
