@@ -163,6 +163,24 @@ export default class PokerRoom implements Party.Server {
         this.broadcastState();
         break;
       }
+      case "appendTasks": {
+        if (!this.isFacilitator(sender.id)) break;
+        const existingIds = new Set(this.tasks.map((t) => t.id));
+        let startOrder = this.tasks.length;
+        for (const raw of msg.tasks) {
+          if (existingIds.has(raw.id)) continue;
+          const t: Task = {
+            ...raw,
+            order: startOrder,
+          };
+          this.tasks.push(t);
+          this.votesByTask[t.id] = {};
+          existingIds.add(t.id);
+          startOrder += 1;
+        }
+        this.broadcastState();
+        break;
+      }
       case "selectTask": {
         if (!this.isFacilitator(sender.id)) break;
         this.activeTaskId = msg.taskId;
