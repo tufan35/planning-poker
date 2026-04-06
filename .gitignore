@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# partykit local dev state
+.partykit/
+
 # next.js
 /.next/
 /out/

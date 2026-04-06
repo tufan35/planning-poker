@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Geçersiz Jira site adresi" }, { status: 400 });
   }
 
-  const { tasks, error } = await fetchJiraIssuesAsTasks(
+  const { tasks, error, hint } = await fetchJiraIssuesAsTasks(
     host,
     email,
     apiToken,
@@ -45,5 +45,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error }, { status: 502 });
   }
 
-  return NextResponse.json({ tasks } satisfies { tasks: Task[] });
+  return NextResponse.json({
+    tasks,
+    ...(hint ? { hint } : {}),
+  } satisfies { tasks: Task[]; hint?: string });
 }
