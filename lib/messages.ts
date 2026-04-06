@@ -16,12 +16,25 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
         title: z.string().min(1).max(500),
         order: z.number().int(),
         jiraKey: z.string().max(32).optional(),
+        description: z.string().max(8000).optional(),
       }),
     ),
   }),
   z.object({
     type: z.literal("addTasksFromLines"),
     text: z.string().max(20_000),
+  }),
+  z.object({
+    type: z.literal("appendTasks"),
+    tasks: z.array(
+      z.object({
+        id: z.string(),
+        title: z.string().min(1).max(500),
+        order: z.number().int(),
+        jiraKey: z.string().max(32).optional(),
+        description: z.string().max(8000).optional(),
+      }),
+    ),
   }),
   z.object({
     type: z.literal("selectTask"),

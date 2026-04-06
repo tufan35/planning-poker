@@ -3,6 +3,8 @@ export type Task = {
   title: string;
   order: number;
   jiraKey?: string;
+  /** Jira açıklaması veya ek bağlam (ADF’ten düz metne çevrilmiş). */
+  description?: string;
 };
 
 export type PlayerPublic = {

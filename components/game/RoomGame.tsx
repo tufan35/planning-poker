@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CARD_LABEL, CARD_VALUES, type CardValue } from "@/lib/deck";
 import { HIDDEN } from "@/lib/consensus";
 import { getPartyKitHost } from "@/lib/party-config";
-import type { GameSnapshot } from "@/lib/types";
+import type { GameSnapshot, Task } from "@/lib/types";
 
 type Props = { roomId: string };
 
@@ -25,6 +25,17 @@ export function RoomGame({ roomId }: Props) {
   const [snap, setSnap] = useState<GameSnapshot | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [jiraOpen, setJiraOpen] = useState(false);
+  const [jiraHost, setJiraHost] = useState("");
+  const [jiraEmail, setJiraEmail] = useState("");
+  const [jiraToken, setJiraToken] = useState("");
+  const [jiraJql, setJiraJql] = useState(
+    'project = PROJ AND sprint IS EMPTY AND type IN (Story, Task, Bug) ORDER BY rank ASC',
+  );
+  const [jiraMaxIssues, setJiraMaxIssues] = useState("150");
+  const [jiraMode, setJiraMode] = useState<"replace" | "append">("replace");
+  const [jiraLoading, setJiraLoading] = useState(false);
+  const [jiraError, setJiraError] = useState<string | null>(null);
   const socketRef = useRef<PartySocket | null>(null);
 
   const connect = useCallback(() => {
@@ -128,6 +139,54 @@ export function RoomGame({ roomId }: Props) {
     setPasteOpen(false);
   };
 
+  const handleJiraImport = async () => {
+    setJiraLoading(true);
+    setJiraError(null);
+    try {
+      const maxIssues = Math.min(
+        300,
+        Math.max(1, Number.parseInt(jiraMaxIssues, 10) || 150),
+      );
+      const res = await fetch("/api/jira/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: jiraHost.trim(),
+          email: jiraEmail.trim(),
+          apiToken: jiraToken.trim(),
+          jql: jiraJql.trim(),
+          maxIssues,
+        }),
+      });
+      const data = (await res.json()) as { tasks?: Task[]; error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Jira içe aktarma başarısız");
+      }
+      const imported = data.tasks ?? [];
+      if (imported.length === 0) {
+        setJiraError("JQL sonuç döndürmedi. PROJ anahtarını ve koşulları kontrol et.");
+        return;
+      }
+      if (jiraMode === "replace") {
+        send({
+          type: "setTasks",
+          tasks: imported.map((t, i) => ({ ...t, order: i })),
+        });
+      } else {
+        send({
+          type: "appendTasks",
+          tasks: imported.map((t) => ({ ...t, order: 0 })),
+        });
+      }
+      setJiraOpen(false);
+      setJiraToken("");
+    } catch (e) {
+      setJiraError(e instanceof Error ? e.message : "Bilinmeyen hata");
+    } finally {
+      setJiraLoading(false);
+    }
+  };
+
   if (phase === "form") {
     return (
       <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4">
@@ -205,13 +264,25 @@ export function RoomGame({ roomId }: Props) {
             Görevler
           </h2>
           {isFacilitator && (
-            <button
-              type="button"
-              onClick={() => setPasteOpen(true)}
-              className="rounded-lg bg-white/5 px-2 py-1 text-xs text-emerald-300 hover:bg-white/10"
-            >
-              + Satır ekle
-            </button>
+            <div className="flex flex-wrap justify-end gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setJiraError(null);
+                  setJiraOpen(true);
+                }}
+                className="rounded-lg bg-indigo-500/20 px-2 py-1 text-xs text-indigo-200 hover:bg-indigo-500/30"
+              >
+                Jira
+              </button>
+              <button
+                type="button"
+                onClick={() => setPasteOpen(true)}
+                className="rounded-lg bg-white/5 px-2 py-1 text-xs text-emerald-300 hover:bg-white/10"
+              >
+                + Satır
+              </button>
+            </div>
           )}
         </div>
         <ul className="max-h-48 flex-1 overflow-y-auto lg:max-h-none">
@@ -239,7 +310,12 @@ export function RoomGame({ roomId }: Props) {
                           {t.jiraKey}
                         </span>
                       )}
-                      {t.title}
+                      <span className="block">{t.title}</span>
+                      {t.description && (
+                        <span className="mt-0.5 line-clamp-2 block text-xs font-normal text-zinc-500">
+                          {t.description}
+                        </span>
+                      )}
                     </span>
                     {c != null && (
                       <span className="shrink-0 rounded-md bg-emerald-500/20 px-1.5 py-0.5 font-mono text-xs text-emerald-300">
@@ -260,6 +336,14 @@ export function RoomGame({ roomId }: Props) {
           <h1 className="mt-1 font-[family-name:var(--font-syne)] text-xl font-bold text-white lg:text-2xl">
             {activeTask?.title ?? "Görev seçilmedi"}
           </h1>
+          {activeTask?.jiraKey && (
+            <p className="mt-1 font-mono text-sm text-emerald-400/90">{activeTask.jiraKey}</p>
+          )}
+          {activeTask?.description && (
+            <div className="mt-3 max-h-40 overflow-y-auto rounded-xl border border-white/5 bg-black/25 p-3 text-sm leading-relaxed text-zinc-400 whitespace-pre-wrap">
+              {activeTask.description}
+            </div>
+          )}
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             {revealed && consensus != null && (
               <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-sm text-emerald-200">
@@ -417,6 +501,121 @@ export function RoomGame({ roomId }: Props) {
           </div>
         </section>
       </main>
+
+      {jiraOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#0f1513] p-6 shadow-xl">
+            <h3 className="font-[family-name:var(--font-syne)] text-lg font-semibold text-white">
+              Jira backlog içe aktar
+            </h3>
+            <p className="mt-1 text-sm text-zinc-500">
+              API token tarayıcıda tutulmaz; sadece bu istekte sunucuya gider.{" "}
+              <a
+                href="https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/"
+                className="text-indigo-400 underline hover:text-indigo-300"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Token oluşturma
+              </a>
+            </p>
+            <label className="mt-4 block text-xs font-medium uppercase tracking-wider text-zinc-500">
+              Jira sitesi (host)
+            </label>
+            <input
+              value={jiraHost}
+              onChange={(e) => setJiraHost(e.target.value)}
+              placeholder="sirket.atlassian.net"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/40"
+            />
+            <label className="mt-3 block text-xs font-medium uppercase tracking-wider text-zinc-500">
+              Atlassian e-posta
+            </label>
+            <input
+              value={jiraEmail}
+              onChange={(e) => setJiraEmail(e.target.value)}
+              placeholder="sen@ornek.com"
+              autoComplete="username"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/40"
+            />
+            <label className="mt-3 block text-xs font-medium uppercase tracking-wider text-zinc-500">
+              API token
+            </label>
+            <input
+              type="password"
+              value={jiraToken}
+              onChange={(e) => setJiraToken(e.target.value)}
+              placeholder="••••••••••••••••"
+              autoComplete="current-password"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/40"
+            />
+            <label className="mt-3 block text-xs font-medium uppercase tracking-wider text-zinc-500">
+              JQL
+            </label>
+            <textarea
+              value={jiraJql}
+              onChange={(e) => setJiraJql(e.target.value)}
+              rows={4}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-xs text-white outline-none focus:ring-2 focus:ring-indigo-500/40"
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-zinc-300">
+                <input
+                  type="radio"
+                  name="jiraMode"
+                  checked={jiraMode === "replace"}
+                  onChange={() => setJiraMode("replace")}
+                  className="accent-indigo-500"
+                />
+                Listeyi değiştir (oylar sıfırlanır)
+              </label>
+              <label className="flex items-center gap-2 text-sm text-zinc-300">
+                <input
+                  type="radio"
+                  name="jiraMode"
+                  checked={jiraMode === "append"}
+                  onChange={() => setJiraMode("append")}
+                  className="accent-indigo-500"
+                />
+                Sonuna ekle
+              </label>
+            </div>
+            <label className="mt-3 block text-xs font-medium uppercase tracking-wider text-zinc-500">
+              En fazla kayıt (1–300)
+            </label>
+            <input
+              value={jiraMaxIssues}
+              onChange={(e) => setJiraMaxIssues(e.target.value)}
+              type="number"
+              min={1}
+              max={300}
+              className="mt-1 w-28 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/40"
+            />
+            {jiraError && (
+              <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                {jiraError}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setJiraOpen(false)}
+                className="rounded-lg px-4 py-2 text-sm text-zinc-400 hover:bg-white/5"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                disabled={jiraLoading}
+                onClick={() => void handleJiraImport()}
+                className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50"
+              >
+                {jiraLoading ? "Çekiliyor…" : "İçe aktar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pasteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
